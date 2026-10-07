@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Biaxial Contour Error Explorer</title>
+<style>
+:root{
+  --bg:#f5f7fa; --panel:#fff; --line:#d9dee7; --text:#172033; --muted:#697386;
+  --blue:#245b8f; --orange:#c85a22; --teal:#16756f; --red:#b63838; --green:#237a48;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,"Malgun Gothic",sans-serif;background:var(--bg);color:var(--text)}
+header{background:#fff;border-bottom:1px solid var(--line);padding:14px 20px;display:flex;gap:18px;align-items:end;flex-wrap:wrap}
+h1{font-size:22px;margin:0;font-weight:700}
+header .sub{font-size:12px;color:var(--muted);max-width:900px;line-height:1.45}
+.app{display:grid;grid-template-columns:310px minmax(760px,1fr);gap:14px;padding:14px;min-height:calc(100vh - 80px)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px}
+.controls{padding:14px;overflow:auto;max-height:calc(100vh - 105px);position:sticky;top:14px}
+.controls h2{font-size:14px;margin:4px 0 10px}
+.group{border-top:1px solid #e8ebf0;padding-top:11px;margin-top:12px}
+.row{display:grid;grid-template-columns:1fr 78px;gap:8px;align-items:center;margin:8px 0}
+.row label{font-size:12px;line-height:1.25}
+.row input[type=number], .row select{width:100%;padding:5px 6px;border:1px solid #cfd5de;border-radius:4px;background:white}
+.slider{display:grid;grid-template-columns:1fr 76px;gap:7px;align-items:center;margin:7px 0}
+.slider .lab{font-size:12px}
+.slider input[type=range]{width:100%}
+.value{font-size:11px;color:var(--muted);text-align:right}
+button{border:1px solid #bfc7d2;border-radius:5px;background:#fff;padding:7px 9px;cursor:pointer;color:var(--text)}
+button:hover{background:#f0f3f7}
+button.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+.btnrow{display:flex;gap:7px;flex-wrap:wrap}
+.main{display:flex;flex-direction:column;gap:12px;min-width:0}
+.cards{display:grid;grid-template-columns:repeat(6,minmax(115px,1fr));gap:8px}
+.card{background:#fff;border:1px solid var(--line);border-radius:7px;padding:10px}
+.card .k{font-size:10px;color:var(--muted);margin-bottom:5px}
+.card .v{font-size:20px;font-weight:700;white-space:nowrap}
+.card .s{font-size:10px;color:var(--muted);margin-top:3px}
+.good{color:var(--green)} .bad{color:var(--red)} .warn{color:var(--orange)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.plotpanel{padding:9px}
+.plothead{font-size:12px;font-weight:700;margin:1px 0 6px}
+canvas{width:100%;height:285px;display:block;background:#fff;border:1px solid #e2e6ec;border-radius:4px}
+.bottom{display:grid;grid-template-columns:1.15fr .85fr;gap:10px}
+.explain,.about{padding:12px}
+.explain h3,.about h3{font-size:13px;margin:0 0 8px}
+.explain ul{padding-left:19px;margin:0;font-size:12px;line-height:1.6}
+.about{font-size:11px;color:#485365;line-height:1.55}
+.gauge{height:9px;background:#e8ebf0;border-radius:6px;position:relative;margin-top:7px;overflow:hidden}
+.gauge .fill{height:100%;background:var(--teal);width:0}
+.gauge .mark{position:absolute;left:50%;top:0;bottom:0;border-left:2px solid #333}
+.note{font-size:10px;color:#7b8494;line-height:1.4;margin-top:9px}
+.small{font-size:10px;color:var(--muted)}
+details summary{cursor:pointer;font-size:12px;font-weight:700}
+pre{font-size:10px;white-space:pre-wrap;background:#f7f8fa;border:1px solid #e3e6eb;padding:8px;border-radius:4px}
+@media(max-width:1100px){.app{grid-template-columns:1fr}.controls{position:static;max-height:none}.cards{grid-template-columns:repeat(3,1fr)}}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>Biaxial Contour Error Explorer</h1></div>
+  <div class="sub">MATLAB v2.16 모델의 핵심 구조를 브라우저용 JavaScript로 옮긴 <b>교육/직관화용 근사 simulator</b>. Position P → Velocity PI → torque limit/delay → ball-screw force → mass/friction → squareness 순서를 유지하지만, 원본 MATLAB 결과를 대체하지 않습니다.</div>
+</header>
+
+<div class="app">
+<section class="panel controls">
+  <h2>1. Case</h2>
+  <div class="row"><label>Preset</label>
+    <select id="preset">
+      <option value="baseline">Baseline</option>
+      <option value="kp">Y Kp mismatch</option>
+      <option value="mass">Y mass mismatch</option>
+      <option value="fric">Stribeck friction</option>
+      <option value="square">Squareness</option>
+      <option value="delay">Y delay</option>
+      <option value="sat">Torque saturation stress</option>
+      <option value="combined">Combined core</option>
+      <option value="stress">Combined stress</option>
+    </select>
+  </div>
+  <div class="row"><label>Trajectory</label>
+    <select id="traj">
+      <option value="circle">Circle</option>
+      <option value="square">Sharp square</option>
+      <option value="diamond">Diamond</option>
+      <option value="diagonal">45° diagonal</option>
+      <option value="sine">Sine weave</option>
+      <option value="recip">Reciprocating</option>
+    </select>
+  </div>
+
+  <div class="group">
+    <h2>2. Plant / controller</h2>
+    <div class="slider"><div class="lab">Feed [mm/s]</div><input id="feed" type="range" min="20" max="120" step="5"><div class="value" id="feedV"></div></div>
+    <div class="slider"><div class="lab">Y mass ratio</div><input id="massRatio" type="range" min="1" max="2" step=".05"><div class="value" id="massRatioV"></div></div>
+    <div class="slider"><div class="lab">Y position Kp ratio</div><input id="kpRatio" type="range" min=".7" max="1" step=".01"><div class="value" id="kpRatioV"></div></div>
+    <div class="slider"><div class="lab">Y velocity PI ratio</div><input id="velRatio" type="range" min=".5" max="1" step=".02"><div class="value" id="velRatioV"></div></div>
+    <div class="row"><label>Friction model</label>
+      <select id="fric"><option>none</option><option>viscous</option><option>coulomb</option><option>stribeck</option></select>
+    </div>
+    <div class="slider"><div class="lab">Friction scale</div><input id="fricScale" type="range" min="0" max="2" step=".1"><div class="value" id="fricScaleV"></div></div>
+    <div class="slider"><div class="lab">Squareness [deg]</div><input id="squareness" type="range" min="0" max=".12" step=".01"><div class="value" id="squarenessV"></div></div>
+    <div class="slider"><div class="lab">Y delay [samples]</div><input id="delay" type="range" min="0" max="8" step="1"><div class="value" id="delayV"></div></div>
+    <div class="slider"><div class="lab">Torque limit [N·m]</div><input id="tauMax" type="range" min=".25" max="4" step=".05"><div class="value" id="tauMaxV"></div></div>
+  </div>
+
+  <div class="group">
+    <h2>3. Precompensation</h2>
+    <div class="row"><label>Mode</label>
+      <select id="precomp">
+        <option value="none">None</option>
+        <option value="one">One-shot</option>
+        <option value="iter2">Iterative ×2</option>
+        <option value="relax">Relaxed ×2</option>
+        <option value="auto">Auto α₂ search (not AI)</option>
+      </select>
+    </div>
+    <div class="slider"><div class="lab">Stage-1 α</div><input id="alpha1" type="range" min="0" max="1.25" step=".05"><div class="value" id="alpha1V"></div></div>
+    <div class="slider"><div class="lab">Stage-2 α</div><input id="alpha2" type="range" min="0" max="1.25" step=".05"><div class="value" id="alpha2V"></div></div>
+    <div class="note">여기서 precomp는 원 연구의 모든 optimizer를 재현하는 것이 아니라, <b>matched predictor residual을 command에 되먹임</b>하는 직관화용 one-shot / iterative / relaxed 구조입니다.</div>
+  </div>
+
+  <div class="group">
+    <div class="btnrow">
+      <button class="primary" id="run">Recompute</button>
+      <button id="reset">Reset baseline</button>
+      <button id="export">Export case JSON</button>
+    </div>
+  </div>
+
+  <div class="group">
+    <details>
+      <summary>MATLAB 기준값</summary>
+      <pre>Ts = 1 ms
+m = 150 kg
+lead = 10 mm/rev
+η = 0.90
+Kp,pos = 45 s⁻¹
+Kp,vel = 18
+Ki,vel = 350
+vCmdMax = ±0.25 m/s
+τMax = ±4.0 N·m
+Fc = 55 N, Fs = 90 N
+B = 260 N·s/m
+vs = 6 mm/s
+vStick = 0.02 mm/s</pre>
+    </details>
+  </div>
+</section>
+
+<main class="main">
+  <div class="cards">
+    <div class="card"><div class="k">Contour RMS</div><div class="v" id="rms">-</div><div class="s" id="rmsD">vs uncomp.</div></div>
+    <div class="card"><div class="k">Contour MAX</div><div class="v" id="max">-</div><div class="s" id="maxD">vs uncomp.</div></div>
+    <div class="card"><div class="k">Tracking RMS</div><div class="v" id="track">-</div><div class="s">time-synchronized</div></div>
+    <div class="card"><div class="k">Torque sat.</div><div class="v" id="sat">-</div><div class="s">move-time %</div></div>
+    <div class="card"><div class="k">Umax</div><div class="v" id="umax">-</div><div class="s" id="uState">hard guideline ≤ 1</div><div class="gauge"><div class="fill" id="uFill"></div><div class="mark"></div></div></div>
+    <div class="card"><div class="k">Chosen α₂</div><div class="v" id="chosenA">-</div><div class="s">auto/relaxed stage</div></div>
+  </div>
+
+  <div class="grid">
+    <section class="panel plotpanel"><div class="plothead">Path — desired / uncompensated / precompensated</div><canvas id="pathPlot"></canvas></section>
+    <section class="panel plotpanel"><div class="plothead">Contour error history</div><canvas id="contourPlot"></canvas></section>
+    <section class="panel plotpanel"><div class="plothead">Tangential tracking error history</div><canvas id="tangPlot"></canvas></section>
+    <section class="panel plotpanel"><div class="plothead">Y-axis torque request / applied / limit</div><canvas id="torquePlot"></canvas></section>
+  </div>
+
+  <div class="bottom">
+    <section class="panel explain">
+      <h3>Causal reading</h3>
+      <ul id="explainList"></ul>
+    </section>
+    <section class="panel about">
+      <h3>What this browser model can / cannot do</h3>
+      <div><b>가능:</b> MATLAB v2.16의 controller/plant 순서, 주요 nominal parameter, friction static-hold, delay, torque saturation, squareness, common/diagnostic trajectory, nearest-path contour 개념을 브라우저에서 즉시 조작.</div>
+      <div style="margin-top:7px"><b>근사:</b> browser trajectory discretization, nearest-path search, precompensation law는 발표/학습용으로 단순화. 따라서 MATLAB report 숫자와 1:1 일치시키는 용도가 아님.</div>
+      <div style="margin-top:7px"><b>AI:</b> 현재 정적 HTML에는 실제 neural model이 없음. 추후 MATLAB에서 생성한 학습데이터로 Python surrogate를 학습한 뒤 ONNX/TensorFlow.js 또는 Python backend로 붙일 수 있음.</div>
+    </section>
+  </div>
+</main>
+</div>
+
+<script>
+"use strict";
+
+/* ----------------------------
+   Constants from project_config_v2
+---------------------------- */
+const CFG = {
+  Ts: 0.001, holdStart:0.40, holdEnd:0.40,
+  m:150, lead:0.010, eta:0.90,
+  KpPos:45, KpVel:18, KiVel:350,
+  vCmdMax:0.25, tauMax:4.0,
+  Fc:55, Fs:90, B:260, vs:0.006, vStick:0.00002,
+  circleR:0.240/(2*Math.PI), squareSide:0.060,
+  diagTravel:0.070, sineLength:0.080, sineCenter:0.030, sineAmp:0.012, sineCycles:2,
+  recipAmp:0.040
+};
+const els={};
+["preset","traj","feed","massRatio","kpRatio","velRatio","fric","fricScale","squareness","delay","tauMax",
+ "precomp","alpha1","alpha2","feedV","massRatioV","kpRatioV","velRatioV","fricScaleV","squarenessV","delayV","tauMaxV",
+ "alpha1V","alpha2V","rms","rmsD","max","maxD","track","sat","umax","uState","uFill","chosenA",
+ "pathPlot","contourPlot","tangPlot","torquePlot","explainList"].forEach(id=>els[id]=document.getElementById(id));
+
+function clamp(x,a,b){return Math.max(a,Math.min(b,x))}
+function lerp(a,b,t){return a+(b-a)*t}
+function sat(x,lim){return clamp(x,-lim,lim)}
+function hypot2(x,y){return Math.sqrt(x*x+y*y)}
+function sign(x){return x>0?1:(x<0?-1:0)}
+function fmt(x,d=2){return Number.isFinite(x)?x.toFixed(d):"-"}
+function pctDelta(a,b){return b===0?0:100*(a-b)/Math.abs(b)}
+function quintic(u){u=clamp(u,0,1); return 10*u**3-15*u**4+6*u**5}
+
+/* ----------------------------
+   Geometry / trajectory
+---------------------------- */
+function sampleLine(a,b,n){
+  const p=[]; for(let i=0;i<n;i++){const u=i/(n-1);p.push([lerp(a[0],b[0],u),lerp(a[1],b[1],u)])} return p;
+}
+function polyline(vertices,nPer=160){
+  let g=[]; for(let k=0;k<vertices.length-1;k++){let s=sampleLine(vertices[k],vertices[k+1],nPer);if(g.length)s=s.slice(1);g=g.concat(s)} return g;
+}
+function geometry(name){
+  if(name==="circle"){
+    const g=[],R=CFG.circleR,N=720; for(let i=0;i<N;i++){let th=2*Math.PI*i/(N-1);g.push([R*Math.cos(th),R*Math.sin(th)])} return g;
+  }
+  if(name==="square"){
+    let h=CFG.squareSide/2; return polyline([[-h,-h],[h,-h],[h,h],[-h,h],[-h,-h]],190);
+  }
+  if(name==="diamond"){
+    let d=CFG.squareSide/Math.sqrt(2); return polyline([[0,-d],[d,0],[0,d],[-d,0],[0,-d]],190);
+  }
+  if(name==="diagonal") return sampleLine([0,0],[CFG.diagTravel,CFG.diagTravel],600);
+  if(name==="sine"){
+    let g=[],N=900; for(let i=0;i<N;i++){let x=CFG.sineLength*i/(N-1);let y=CFG.sineCenter+CFG.sineAmp*Math.sin(2*Math.PI*CFG.sineCycles*x/CFG.sineLength);g.push([x,y])} return g;
+  }
+  if(name==="recip") return sampleLine([-CFG.recipAmp,0],[CFG.recipAmp,0],800);
+}
+function arcTable(g){
+  let s=[0]; for(let i=1;i<g.length;i++)s.push(s[i-1]+hypot2(g[i][0]-g[i-1][0],g[i][1]-g[i-1][1])); return s;
+}
+function interpGeom(g,sg,s){
+  if(s<=0)return [g[0][0],g[0][1],0];
+  if(s>=sg[sg.length-1])return [g[g.length-1][0],g[g.length-1][1],g.length-2];
+  let lo=0,hi=sg.length-1;
+  while(hi-lo>1){let m=(lo+hi)>>1;if(sg[m]<=s)lo=m;else hi=m}
+  let den=sg[hi]-sg[lo]||1,u=(s-sg[lo])/den;
+  return [lerp(g[lo][0],g[hi][0],u),lerp(g[lo][1],g[hi][1],u),lo];
+}
+function makeTrajectory(name,feed){
+  if(name==="recip"){
+    const wp=[0,CFG.recipAmp,-CFG.recipAmp,CFG.recipAmp,0], t=[],xy=[],g=geometry(name), idx=[];
+    let curT=0;
+    for(let k=0;k<=Math.round(CFG.holdStart/CFG.Ts);k++){t.push(curT);xy.push([0,0]);idx.push(400);curT+=CFG.Ts}
+    for(let j=0;j<wp.length-1;j++){
+      let D=Math.abs(wp[j+1]-wp[j]),Tideal=Math.max(CFG.Ts,1.875*D/feed),n=Math.max(1,Math.round(Tideal/CFG.Ts)),T=n*CFG.Ts;
+      for(let k=1;k<=n;k++){let u=k/n,q=quintic(u),x=wp[j]+(wp[j+1]-wp[j])*q;t.push(curT);xy.push([x,0]);idx.push(Math.round((x+CFG.recipAmp)/(2*CFG.recipAmp)*(g.length-2)));curT+=CFG.Ts}
+    }
+    for(let k=0;k<Math.round(CFG.holdEnd/CFG.Ts);k++){t.push(curT);xy.push([0,0]);idx.push(400);curT+=CFG.Ts}
+    return {t,xy,g,idx,moveMask:t.map(v=>v>=CFG.holdStart && v<=curT-CFG.holdEnd)};
+  }
+  const g=geometry(name),sg=arcTable(g),S=sg[sg.length-1],Tmove=1.875*S/feed,Tend=CFG.holdStart+Tmove+CFG.holdEnd;
+  const N=Math.floor(Tend/CFG.Ts)+1,t=[],xy=[],idx=[],mask=[];
+  for(let k=0;k<N;k++){
+    let tt=k*CFG.Ts,u=(tt-CFG.holdStart)/Tmove,s=quintic(u)*S,p=interpGeom(g,sg,s);
+    t.push(tt);xy.push([p[0],p[1]]);idx.push(p[2]);mask.push(u>=0&&u<=1);
+  }
+  return {t,xy,g,idx,moveMask:mask};
+}
+
+/* ----------------------------
+   Discrete axis / plant model
+---------------------------- */
+function friction(A,model,v,Fdrive,scale){
+  if(model==="none"||scale===0)return [0,false];
+  let Fc=A.Fc*scale,Fs=A.Fs*scale,B=A.B*scale;
+  if(model==="viscous")return [B*v,false];
+  if(model==="coulomb"){
+    if(Math.abs(v)<A.vStick && Math.abs(Fdrive)<=Fc)return [Fdrive,true];
+    let d=Math.abs(v)>A.vStick?sign(v):sign(Fdrive); return [B*v+d*Fc,false];
+  }
+  if(model==="stribeck"){
+    if(Math.abs(v)<A.vStick && Math.abs(Fdrive)<=Fs)return [Fdrive,true];
+    let d=Math.abs(v)>A.vStick?sign(v):sign(Fdrive);
+    let mag=Fc+(Fs-Fc)*Math.exp(-((Math.abs(v)/A.vs)**2));
+    return [B*v+d*mag,false];
+  }
+  return [0,false];
+}
+function axisStep(S,r,A,opt){
+  let ep=r-S.x, vReq=A.KpPos*ep, vCmd=sat(vReq,A.vCmdMax), vSat=Math.abs(vReq)>A.vCmdMax;
+  let ev=vCmd-S.v, tauReq=A.KpVel*ev+A.KiVel*S.I, tauCmd=sat(tauReq,A.tauMax), tauSat=Math.abs(tauReq)>A.tauMax;
+  let allowI=true;
+  if(tauReq>A.tauMax && ev>0)allowI=false;
+  if(tauReq<-A.tauMax && ev<0)allowI=false;
+  let Inew=S.I+(allowI?CFG.Ts*ev:0);
+  let tauApplied=tauCmd, q=S.q;
+  if(q.length){tauApplied=q[0];q=q.slice(1);q.push(tauCmd)}
+  let Fdrive=(2*Math.PI*A.eta/A.lead)*tauApplied;
+  let [Ffric,stuck]=friction(A,opt.fric,S.v,Fdrive,opt.fricScale);
+  let a=0,vn=0,xn=S.x;
+  if(!stuck){a=(Fdrive-Ffric)/A.m;vn=S.v+CFG.Ts*a;xn=S.x+CFG.Ts*vn}
+  return [{x:xn,v:vn,I:Inew,q:q}, {ep,vReq,vCmd,ev,tauReq,tauCmd,tauApplied,Fdrive,Ffric,a,vSat,tauSat,stuck}];
+}
+function runPlant(TR,command,opt){
+  const N=TR.t.length;
+  let Ax={m:CFG.m,lead:CFG.lead,eta:CFG.eta,KpPos:CFG.KpPos,KpVel:CFG.KpVel,KiVel:CFG.KiVel,vCmdMax:CFG.vCmdMax,tauMax:opt.tauMax,
+          Fc:CFG.Fc,Fs:CFG.Fs,B:CFG.B,vs:CFG.vs,vStick:CFG.vStick};
+  let Ay={...Ax,m:CFG.m*opt.massRatio,KpPos:CFG.KpPos*opt.kpRatio,KpVel:CFG.KpVel*opt.velRatio,KiVel:CFG.KiVel*opt.velRatio};
+  let sx={x:command[0][0],v:0,I:0,q:[]},sy={x:command[0][1],v:0,I:0,q:new Array(opt.delay).fill(0)};
+  let world=new Array(N),servo=new Array(N),tauReqY=new Array(N),tauAppY=new Array(N),vReqAbs=new Array(N),tauReqAbs=new Array(N),satArr=new Array(N);
+  let e=opt.squareness*Math.PI/180,ss=Math.sin(e),cc=Math.cos(e);
+  for(let k=0;k<N;k++){
+    let ox,oy;[sx,ox]=axisStep(sx,command[k][0],Ax,opt);[sy,oy]=axisStep(sy,command[k][1],Ay,opt);
+    let X=sx.x,Y=sy.x;servo[k]=[X,Y];world[k]=[X+ss*Y,cc*Y];
+    tauReqY[k]=oy.tauReq;tauAppY[k]=oy.tauApplied;
+    vReqAbs[k]=Math.max(Math.abs(ox.vReq)/Ax.vCmdMax,Math.abs(oy.vReq)/Ay.vCmdMax);
+    tauReqAbs[k]=Math.max(Math.abs(ox.tauReq)/Ax.tauMax,Math.abs(oy.tauReq)/Ay.tauMax);
+    satArr[k]=ox.tauSat||oy.tauSat;
+  }
+  return {world,servo,tauReqY,tauAppY,vReqAbs,tauReqAbs,satArr};
+}
+
+/* ----------------------------
+   Metrics / nearest path
+---------------------------- */
+function nearestOnLocalPath(P,g,center,window=14){
+  let best=1e99,bq=[g[0][0],g[0][1]],bt=[1,0];
+  let a0=Math.max(0,center-window),a1=Math.min(g.length-2,center+window);
+  for(let j=a0;j<=a1;j++){
+    let ax=g[j][0],ay=g[j][1],bx=g[j+1][0],by=g[j+1][1],dx=bx-ax,dy=by-ay,den=dx*dx+dy*dy;
+    if(den<=1e-18)continue;
+    let u=clamp(((P[0]-ax)*dx+(P[1]-ay)*dy)/den,0,1),qx=ax+u*dx,qy=ay+u*dy,dd=(P[0]-qx)**2+(P[1]-qy)**2;
+    if(dd<best){best=dd;bq=[qx,qy];let n=Math.sqrt(den);bt=[dx/n,dy/n]}
+  }
+  return [bq,bt,Math.sqrt(best)];
+}
+function analyze(TR,S,reference){
+  const N=TR.t.length,cont=new Array(N),tang=new Array(N),track=new Array(N),mask=TR.moveMask;
+  let sumC=0,sumT=0,n=0,maxC=0,sat=0,umax=0;
+  for(let k=0;k<N;k++){
+    let P=S.world[k],q,tan,d;[q,tan,d]=nearestOnLocalPath(P,TR.g,TR.idx[k]);
+    let rx=reference[k][0]-P[0],ry=reference[k][1]-P[1],tn=hypot2(tan[0],tan[1])||1;tan=[tan[0]/tn,tan[1]/tn];
+    let et=rx*tan[0]+ry*tan[1],tr=hypot2(rx,ry);
+    cont[k]=d*1e6;tang[k]=et*1e6;track[k]=tr*1e6;
+    if(mask[k]){sumC+=d*d;sumT+=tr*tr;n++;maxC=Math.max(maxC,d);if(S.satArr[k])sat++;umax=Math.max(umax,S.vReqAbs[k],S.tauReqAbs[k])}
+  }
+  return {cont,tang,track,rms:1e6*Math.sqrt(sumC/Math.max(1,n)),max:1e6*maxC,trackRms:1e6*Math.sqrt(sumT/Math.max(1,n)),satPct:100*sat/Math.max(1,n),umax};
+}
+
+/* ----------------------------
+   Approximate precompensation
+---------------------------- */
+function addCommand(base,err,a){
+  return base.map((p,k)=>[p[0]+a*err[k][0],p[1]+a*err[k][1]]);
+}
+function syncResidual(reference,world){return reference.map((p,k)=>[p[0]-world[k][0],p[1]-world[k][1]])}
+function precompRun(TR,opt){
+  const ref=TR.xy;
+  let unS=runPlant(TR,ref,opt),unA=analyze(TR,unS,ref);
+  if(opt.precomp==="none")return {unS,unA,coS:unS,coA:unA,cmd:ref,chosenA:0};
+
+  let e1=syncResidual(ref,unS.world),cmd1=addCommand(ref,e1,opt.alpha1),s1=runPlant(TR,cmd1,opt),a1=analyze(TR,s1,ref);
+  if(opt.precomp==="one")return {unS,unA,coS:s1,coA:a1,cmd:cmd1,chosenA:0};
+
+  let e2=syncResidual(ref,s1.world),a2=opt.precomp==="iter2"?1:opt.alpha2;
+  if(opt.precomp==="auto"){
+    let best=null;
+    for(let test of [0,.15,.25,.4,.6,.8,1]){
+      let c=addCommand(cmd1,e2,test),s=runPlant(TR,c,opt),a=analyze(TR,s,ref);
+      // quality + hard-utilization penalty
+      let cost=a.rms + Math.max(0,a.umax-1)*300 + .02*a.max;
+      if(!best||cost<best.cost)best={cost,test,c,s,a};
+    }
+    return {unS,unA,coS:best.s,coA:best.a,cmd:best.c,chosenA:best.test};
+  }
+  let cmd2=addCommand(cmd1,e2,a2),s2=runPlant(TR,cmd2,opt),aa2=analyze(TR,s2,ref);
+  return {unS,unA,coS:s2,coA:aa2,cmd:cmd2,chosenA:a2};
+}
+
+/* ----------------------------
+   Drawing
+---------------------------- */
+function setupCanvas(c){
+  let dpr=window.devicePixelRatio||1,rect=c.getBoundingClientRect(),w=Math.max(300,rect.width),h=Math.max(200,rect.height);
+  c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);let ctx=c.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);return [ctx,w,h];
+}
+function drawAxes(ctx,w,h,xmin,xmax,ymin,ymax,xlab,ylab){
+  const L=48,R=14,T=16,B=35,pw=w-L-R,ph=h-T-B;
+  ctx.clearRect(0,0,w,h);ctx.strokeStyle="#dfe3e9";ctx.lineWidth=1;
+  for(let i=0;i<=5;i++){let x=L+pw*i/5;ctx.beginPath();ctx.moveTo(x,T);ctx.lineTo(x,T+ph);ctx.stroke()}
+  for(let i=0;i<=4;i++){let y=T+ph*i/4;ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(L+pw,y);ctx.stroke()}
+  ctx.strokeStyle="#697386";ctx.beginPath();ctx.rect(L,T,pw,ph);ctx.stroke();
+  ctx.fillStyle="#697386";ctx.font="10px Arial";ctx.textAlign="center";
+  for(let i=0;i<=5;i++){let v=xmin+(xmax-xmin)*i/5;ctx.fillText(fmt(v,1),L+pw*i/5,T+ph+15)}
+  ctx.textAlign="right";
+  for(let i=0;i<=4;i++){let v=ymax-(ymax-ymin)*i/4;ctx.fillText(fmt(v,1),L-5,T+ph*i/4+3)}
+  ctx.textAlign="center";ctx.fillText(xlab,L+pw/2,h-4);
+  ctx.save();ctx.translate(12,T+ph/2);ctx.rotate(-Math.PI/2);ctx.fillText(ylab,0,0);ctx.restore();
+  return {L,T,pw,ph,X:v=>L+(v-xmin)/(xmax-xmin||1)*pw,Y:v=>T+(ymax-v)/(ymax-ymin||1)*ph};
+}
+function thin(arr,maxN=1400){let step=Math.max(1,Math.ceil(arr.length/maxN)),out=[];for(let i=0;i<arr.length;i+=step)out.push([i,arr[i]]);return out}
+function line(ctx,ax,data,color,width=1.6,accessor=null){
+  ctx.strokeStyle=color;ctx.lineWidth=width;ctx.beginPath();let first=true;
+  for(let [i,v] of thin(data)){let x,y;if(accessor){[x,y]=accessor(v,i)}else{x=i;y=v}let px=ax.X(x),py=ax.Y(y);if(first){ctx.moveTo(px,py);first=false}else ctx.lineTo(px,py)}ctx.stroke();
+}
+function legend(ctx,items,x,y){ctx.font="10px Arial";ctx.textAlign="left";let yy=y;for(let [name,color] of items){ctx.strokeStyle=color;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x,yy);ctx.lineTo(x+18,yy);ctx.stroke();ctx.fillStyle="#394457";ctx.fillText(name,x+23,yy+3);yy+=15}}
+function drawPath(TR,res){
+  let [ctx,w,h]=setupCanvas(els.pathPlot),sets=[TR.xy,res.unS.world,res.coS.world,res.cmd],all=sets.flat();
+  let xs=all.map(p=>p[0]*1e3),ys=all.map(p=>p[1]*1e3),pad=3,xmin=Math.min(...xs)-pad,xmax=Math.max(...xs)+pad,ymin=Math.min(...ys)-pad,ymax=Math.max(...ys)+pad;
+  let ax=drawAxes(ctx,w,h,xmin,xmax,ymin,ymax,"X [mm]","Y [mm]");
+  function pLine(arr,col,wid){ctx.strokeStyle=col;ctx.lineWidth=wid;ctx.beginPath();let f=true;for(let [i,p] of thin(arr,900)){let px=ax.X(p[0]*1e3),py=ax.Y(p[1]*1e3);if(f){ctx.moveTo(px,py);f=false}else ctx.lineTo(px,py)}ctx.stroke()}
+  pLine(TR.xy,"#111827",2.0);pLine(res.unS.world,"#9aa3af",1.5);if(state().precomp!=="none"){pLine(res.cmd,"#c85a22",1.1);pLine(res.coS.world,"#245b8f",2)}
+  legend(ctx,[["desired","#111827"],["uncomp.","#9aa3af"],["precomp cmd","#c85a22"],["comp. actual","#245b8f"]],w-128,28);
+}
+function drawHistory(canvas,t,series,ylab){
+  let [ctx,w,h]=setupCanvas(canvas),all=series.flatMap(s=>s.data),mx=Math.max(1,...all.map(Math.abs)),ymin=-mx*1.08,ymax=mx*1.08;
+  if(series.every(s=>s.nonneg)){ymin=0;ymax=Math.max(1,...all)*1.08}
+  let ax=drawAxes(ctx,w,h,t[0],t[t.length-1],ymin,ymax,"Time [s]",ylab);
+  for(let s of series)line(ctx,ax,s.data,s.color,s.width||1.6,(v,i)=>[t[i],v]);
+  legend(ctx,series.map(s=>[s.name,s.color]),w-128,28);
+}
+function drawTorque(TR,res,opt){
+  let [ctx,w,h]=setupCanvas(els.torquePlot),all=res.unS.tauReqY.concat(res.coS.tauReqY,[opt.tauMax,-opt.tauMax]),mx=Math.max(.3,...all.map(Math.abs))*1.08;
+  let ax=drawAxes(ctx,w,h,TR.t[0],TR.t[TR.t.length-1],-mx,mx,"Time [s]","Torque [N·m]");
+  line(ctx,ax,res.unS.tauReqY,"#9aa3af",1.2,(v,i)=>[TR.t[i],v]);
+  line(ctx,ax,res.coS.tauReqY,"#245b8f",1.5,(v,i)=>[TR.t[i],v]);
+  line(ctx,ax,new Array(TR.t.length).fill(opt.tauMax),"#b63838",1,(v,i)=>[TR.t[i],v]);
+  line(ctx,ax,new Array(TR.t.length).fill(-opt.tauMax),"#b63838",1,(v,i)=>[TR.t[i],v]);
+  legend(ctx,[["uncomp req","#9aa3af"],["current req","#245b8f"],["±limit","#b63838"]],w-128,28);
+}
+
+/* ----------------------------
+   UI
+---------------------------- */
+const defaults={feed:40,massRatio:1,kpRatio:1,velRatio:1,fric:"none",fricScale:1,squareness:0,delay:0,tauMax:4,precomp:"none",alpha1:1,alpha2:.25,traj:"circle"};
+const presets={
+ baseline:{...defaults},
+ kp:{...defaults,kpRatio:.9},
+ mass:{...defaults,massRatio:1.2,traj:"sine"},
+ fric:{...defaults,fric:"stribeck",fricScale:1,traj:"circle"},
+ square:{...defaults,squareness:.08,traj:"diamond"},
+ delay:{...defaults,delay:4,traj:"sine"},
+ sat:{...defaults,tauMax:.25,feed:80,traj:"diamond"},
+ combined:{...defaults,massRatio:1.2,kpRatio:.9,velRatio:.9,fric:"stribeck",squareness:.08,traj:"diamond"},
+ stress:{...defaults,massRatio:1.2,kpRatio:.9,velRatio:.9,fric:"stribeck",squareness:.08,delay:4,tauMax:.25,feed:80,traj:"diamond"}
+};
+function setState(s){
+  for(let k of Object.keys(defaults))if(els[k])els[k].value=s[k];
+  updateValues();
+}
+function state(){
+  return {
+    traj:els.traj.value,feed:+els.feed.value/1000,massRatio:+els.massRatio.value,kpRatio:+els.kpRatio.value,velRatio:+els.velRatio.value,
+    fric:els.fric.value,fricScale:+els.fricScale.value,squareness:+els.squareness.value,delay:+els.delay.value,tauMax:+els.tauMax.value,
+    precomp:els.precomp.value,alpha1:+els.alpha1.value,alpha2:+els.alpha2.value
+  };
+}
+function updateValues(){
+  els.feedV.textContent=els.feed.value+" mm/s";els.massRatioV.textContent=(+els.massRatio.value).toFixed(2)+"×";
+  els.kpRatioV.textContent=(+els.kpRatio.value).toFixed(2)+"×";els.velRatioV.textContent=(+els.velRatio.value).toFixed(2)+"×";
+  els.fricScaleV.textContent=(+els.fricScale.value).toFixed(1)+"×";els.squarenessV.textContent=(+els.squareness.value).toFixed(2)+"°";
+  els.delayV.textContent=els.delay.value+" ms";els.tauMaxV.textContent=(+els.tauMax.value).toFixed(2);
+  els.alpha1V.textContent=(+els.alpha1.value).toFixed(2);els.alpha2V.textContent=(+els.alpha2.value).toFixed(2);
+}
+function explanations(opt,res){
+  let a=[];
+  if(opt.kpRatio<.999)a.push(`Y position Kp ↓ (${fmt(opt.kpRatio,2)}×) → Y following lag ↑ → X/Y relative lag → contour error.`);
+  if(opt.massRatio>1.001)a.push(`Y mass ↑ (${fmt(opt.massRatio,2)}×) → acceleration 구간 inertial torque demand ↑.`);
+  if(opt.velRatio<.999)a.push(`Y velocity PI gain ↓ → velocity-loop error와 transient가 증가할 수 있음.`);
+  if(opt.fric!=="none"&&opt.fricScale>0)a.push(`${opt.fric} friction → reversal/저속 구간에서 static hold·breakaway 또는 resistive force가 추가됨.`);
+  if(opt.squareness>0)a.push(`Squareness ${fmt(opt.squareness,2)}° → servo 좌표가 world 좌표로 변환될 때 path-normal geometric error가 생김.`);
+  if(opt.delay>0)a.push(`Y torque delay ${opt.delay} ms → 빠른 torque event에서 X/Y relative response가 벌어짐.`);
+  if(opt.tauMax<3.99)a.push(`Torque limit ±${fmt(opt.tauMax,2)} N·m → request가 limit를 넘으면 clipping. 짧은 exposure라도 큰 tracking spike가 가능.`);
+  if(opt.precomp!=="none"){
+    let imp=100*(1-res.coA.rms/res.unA.rms);
+    a.push(`Precompensation '${opt.precomp}' → predicted synchronized residual을 command에 미리 더함. 현재 contour RMS 변화: ${imp>=0?"개선":"악화"} ${fmt(Math.abs(imp),1)}%.`);
+    if(res.coA.umax>1)a.push(`주의: compensated command의 Umax=${fmt(res.coA.umax,2)} > 1. 오차가 줄어도 actuator feasibility는 별도 문제.`);
+  }else a.push(`Precomp OFF → 현재 parameter가 만드는 raw causal signature를 관찰.`);
+  if(!a.length)a.push("Symmetric baseline: finite Position-P following lag와 path geometry만 남긴 nominal case.");
+  return a;
+}
+let timer=null,last=null;
+function recompute(){
+  updateValues();let opt=state(),TR=makeTrajectory(opt.traj,opt.feed),res=precompRun(TR,opt);last={opt,TR,res};
+  els.rms.textContent=fmt(res.coA.rms,2)+" µm";els.max.textContent=fmt(res.coA.max,2)+" µm";els.track.textContent=fmt(res.coA.trackRms,1)+" µm";
+  els.sat.textContent=fmt(res.coA.satPct,2)+"%";els.umax.textContent=fmt(res.coA.umax,2);els.chosenA.textContent=fmt(res.chosenA,2);
+  let dr=pctDelta(res.coA.rms,res.unA.rms),dm=pctDelta(res.coA.max,res.unA.max);
+  els.rmsD.textContent=(dr>=0?"+":"")+fmt(dr,1)+"% vs uncomp.";els.maxD.textContent=(dm>=0?"+":"")+fmt(dm,1)+"% vs uncomp.";
+  els.umax.className="v "+(res.coA.umax<=1?"good":"bad");els.uState.textContent=res.coA.umax<=1?"PASS · hard guideline ≤ 1":"FAIL · actuator demand > 1";
+  els.uFill.style.width=(Math.min(2,res.coA.umax)/2*100)+"%";els.uFill.style.background=res.coA.umax<=1?"#16756f":"#b63838";
+  drawPath(TR,res);
+  drawHistory(els.contourPlot,TR.t,[{name:"uncomp.",data:res.unA.cont,color:"#9aa3af",nonneg:true},{name:"current",data:res.coA.cont,color:"#245b8f",nonneg:true}],"|contour| [µm]");
+  drawHistory(els.tangPlot,TR.t,[{name:"uncomp.",data:res.unA.tang,color:"#9aa3af"},{name:"current",data:res.coA.tang,color:"#c85a22"}],"tangential [µm]");
+  drawTorque(TR,res,opt);
+  els.explainList.innerHTML="";for(let t of explanations(opt,res)){let li=document.createElement("li");li.textContent=t;els.explainList.appendChild(li)}
+}
+function schedule(){clearTimeout(timer);timer=setTimeout(recompute,130)}
+els.preset.addEventListener("change",()=>{setState({...presets[els.preset.value]});schedule()});
+for(let id of ["traj","feed","massRatio","kpRatio","velRatio","fric","fricScale","squareness","delay","tauMax","precomp","alpha1","alpha2"]){
+  els[id].addEventListener("input",schedule);els[id].addEventListener("change",schedule);
+}
+document.getElementById("run").addEventListener("click",recompute);
+document.getElementById("reset").addEventListener("click",()=>{els.preset.value="baseline";setState({...defaults});recompute()});
+document.getElementById("export").addEventListener("click",()=>{
+  if(!last)return;let blob=new Blob([JSON.stringify({parameters:last.opt,metrics:last.res.coA},null,2)],{type:"application/json"}),a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);a.download="biaxial_case.json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+});
+window.addEventListener("resize",()=>{if(last){drawPath(last.TR,last.res);drawHistory(els.contourPlot,last.TR.t,[{name:"uncomp.",data:last.res.unA.cont,color:"#9aa3af",nonneg:true},{name:"current",data:last.res.coA.cont,color:"#245b8f",nonneg:true}],"|contour| [µm]");drawHistory(els.tangPlot,last.TR.t,[{name:"uncomp.",data:last.res.unA.tang,color:"#9aa3af"},{name:"current",data:last.res.coA.tang,color:"#c85a22"}],"tangential [µm]");drawTorque(last.TR,last.res,last.opt)}});
+
+els.preset.value="baseline";setState({...defaults});recompute();
+</script>
+</body>
+</html>
